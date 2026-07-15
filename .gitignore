@@ -28,9 +28,10 @@ Thumbs.db
 
 # ---- Secrets (CFG-9.4) ----
 # Never commit real secrets. Local overrides and env files stay untracked.
+# .env is intentionally tracked: it holds local-dev-only placeholder values so a
+# fresh clone can `docker compose up` without manually recreating it.
 appsettings.*.local.json
 appsettings.Local.json
-.env
 .env.*
 secrets.json
 *.pfx
