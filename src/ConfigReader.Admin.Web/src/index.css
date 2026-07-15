@@ -1,0 +1,249 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light dark;
+  --border: #d0d7de;
+  --muted: #57606a;
+  --danger: #b42318;
+  --accent: #0969da;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f6f8fa;
+  color: #1f2328;
+}
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.filter input {
+  min-width: 220px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.toolbar {
+  margin: 1.25rem 0;
+}
+
+.config-form {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.config-form h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.form-grid input,
+.form-grid select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.form-grid label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.form-grid label.checkbox input {
+  width: auto;
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.config-table th,
+.config-table td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.config-table th {
+  background: #f6f8fa;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.config-table tr:last-child td {
+  border-bottom: none;
+}
+
+.edit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.empty-state,
+.loading {
+  color: var(--muted);
+  padding: 1rem 0;
+}
+
+.error {
+  color: var(--danger);
+  background: #fff0ef;
+  border: 1px solid #ffc9c6;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.dialog {
+  background: #fff;
+  border-radius: 10px;
+  padding: 1.25rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.dialog-meta {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.dialog-meta dt {
+  font-weight: 600;
+}
+
+.dialog-meta dd {
+  margin: 0.1rem 0 0;
+  color: #1f2328;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.dialog-field input,
+.dialog-field select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.dialog .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #1f2328;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

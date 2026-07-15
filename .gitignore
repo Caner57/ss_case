@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+
+# .NET
+*.user
+*.suo
+project.lock.json
+.vs/
+.vscode/
+
+# Rider / JetBrains
+.idea/
+
+# Node / React (Admin.Web)
+node_modules/
+dist/
+.npm/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ---- Secrets (CFG-9.4) ----
+# Never commit real secrets. Local overrides and env files stay untracked.
+appsettings.*.local.json
+appsettings.Local.json
+.env
+.env.*
+secrets.json
+*.pfx
+*.key

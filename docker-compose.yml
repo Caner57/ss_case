@@ -1,0 +1,132 @@
+# Ecosystem orchestration (CFG-1.3) hardened per CFG-9.5.
+# Security posture:
+#   - Mongo runs with auth on; app services use least-privilege users (RO for the
+#     library, RW for the Admin API) — never the root user.
+#   - Redis is protected with requirepass.
+#   - Mongo (27017) and Redis (6379) are NOT published to the host; they are reachable
+#     only over the internal compose network. Only config-api / config-ui face the host.
+#   - All credentials come from .env; nothing is hardcoded here.
+
+services:
+  mongo:
+    build:
+      context: ./docker/mongo
+    image: config-mongo:7
+    container_name: config-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: configdb
+      MONGO_APP_RW_USERNAME: ${MONGO_APP_RW_USERNAME}
+      MONGO_APP_RW_PASSWORD: ${MONGO_APP_RW_PASSWORD}
+      MONGO_APP_RO_USERNAME: ${MONGO_APP_RO_USERNAME}
+      MONGO_APP_RO_PASSWORD: ${MONGO_APP_RO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - config-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: config-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    networks:
+      - config-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  config-api:
+    build:
+      context: .
+      dockerfile: src/ConfigReader.Admin.Api/Dockerfile
+    container_name: config-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Mongo: mongodb://${MONGO_APP_RW_USERNAME}:${MONGO_APP_RW_PASSWORD}@mongo:27017/configdb?authSource=configdb
+      Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD}
+      # Admin API key (fail-closed auth) and the single browser origin (the config-ui) allowed by CORS.
+      AdminApi__ApiKey: ${ADMIN_API_KEY}
+      AdminApi__AllowedOrigins__0: http://localhost:${CONFIG_UI_PORT:-8081}
+    ports:
+      - "${CONFIG_API_PORT:-8080}:8080"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - config-net
+
+  config-ui:
+    build:
+      context: ./src/ConfigReader.Admin.Web
+      dockerfile: Dockerfile
+      args:
+        # Baked into the static bundle at build time (Vite has no runtime env) — must match the
+        # Admin API's host-published port so browser requests from config-ui reach config-api.
+        VITE_API_BASE_URL: http://localhost:${CONFIG_API_PORT:-8080}
+        # config-ui sends this automatically with every request (no manual entry in the UI).
+        VITE_ADMIN_API_KEY: ${ADMIN_API_KEY}
+    container_name: config-ui
+    restart: unless-stopped
+    ports:
+      - "${CONFIG_UI_PORT:-8081}:80"
+    depends_on:
+      - config-api
+    networks:
+      - config-net
+
+  service-a:
+    build:
+      context: .
+      dockerfile: src/ConfigReader.Samples.ServiceA/Dockerfile
+    container_name: config-service-a
+    environment:
+      ConfigReader__ApplicationName: SERVICE-A
+      ConnectionStrings__Mongo: mongodb://${MONGO_APP_RO_USERNAME}:${MONGO_APP_RO_PASSWORD}@mongo:27017/configdb?authSource=configdb
+      Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - config-net
+
+  service-b:
+    build:
+      context: .
+      dockerfile: src/ConfigReader.Samples.ServiceB/Dockerfile
+    container_name: config-service-b
+    environment:
+      ConfigReader__ApplicationName: SERVICE-B
+      ConnectionStrings__Mongo: mongodb://${MONGO_APP_RO_USERNAME}:${MONGO_APP_RO_PASSWORD}@mongo:27017/configdb?authSource=configdb
+      Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - config-net
+
+networks:
+  config-net:
+    driver: bridge
+
+volumes:
+  mongo-data:

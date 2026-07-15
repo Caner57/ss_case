@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>d58e9ff3-4c0c-48a0-9f99-b9103d97c72b</UserSecretsId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConfigReader.Core\ConfigReader.Core.csproj" />
+    <ProjectReference Include="..\ConfigReader.Storage.Mongo\ConfigReader.Storage.Mongo.csproj" />
+    <ProjectReference Include="..\ConfigReader.Broker.Redis\ConfigReader.Broker.Redis.csproj" />
+  </ItemGroup>
+
+</Project>
