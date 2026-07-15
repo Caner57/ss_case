@@ -1,35 +1,36 @@
-# ConfigReader — Dynamic Configuration Library
+# ConfigReader — Dinamik Konfigürasyon Kütüphanesi
 
-A .NET 8 dynamic configuration library with a MongoDB store, a Redis change broker, a management
-Web API, a React admin UI and two sample consumer services — all runnable with a single
-`docker compose up`.
+MongoDB depolama, Redis değişiklik yayıncısı (broker), bir yönetim Web API'si, bir React admin
+arayüzü ve iki örnek tüketici (consumer) servisiyle birlikte gelen; tamamı tek bir
+`docker compose up` komutuyla çalıştırılabilen bir .NET 8 dinamik konfigürasyon kütüphanesi.
 
-The library lets any .NET application read configuration values **while it is running**, with no
-deployment, restart or recycle needed when a value changes. A value updated through the admin
-surface is picked up by the consuming service on its next refresh — or **instantly** when the Redis
-broker is wired.
+Bu kütüphane, herhangi bir .NET uygulamasının konfigürasyon değerlerini **çalışırken** okumasına
+izin verir; bir değer değiştiğinde deployment, restart veya recycle gerekmez. Admin arayüzü
+üzerinden güncellenen bir değer, tüketici servis tarafından bir sonraki yenilemede — Redis broker
+bağlıysa **anında** — algılanır.
 
 ---
 
-## Architecture
+## Mimari
 
-Dependencies flow **inward** (Clean Architecture): the domain/application core knows nothing about
-MongoDB, Redis or ASP.NET. Infrastructure and hosts depend on the core, never the reverse.
+Bağımlılıklar **içe doğru** akar (Clean Architecture): domain/application çekirdeği MongoDB,
+Redis veya ASP.NET hakkında hiçbir şey bilmez. Infrastructure ve host'lar çekirdeğe bağımlıdır,
+asla tersi değil.
 
 ```
                          ┌───────────────────────────────────────────┐
                          │            ConfigReader.Core               │
-                         │  (pure .NET 8 class library — the "dll")   │
+                         │  (saf .NET 8 class library — "dll")        │
                          │                                            │
-   consumer host ───────►│  ConfigurationReader(appName, connStr, ms) │
-   (any host: console,   │  T GetValue<T>(key)                        │
-    web, web api, WCF...) │                                            │
-                         │  Ports (interfaces):                       │
+   tüketici host ───────►│  ConfigurationReader(appName, connStr, ms) │
+   (herhangi bir host:   │  T GetValue<T>(key)                        │
+    console, web,        │                                            │
+    web api, WCF...)     │  Portlar (arayüzler):                      │
                          │   • IConfigurationStore                    │
                          │   • IChangeSubscriber / IChangeNotifier    │
                          │   • IConfigurationStoreFactory             │
                          └──────▲───────────────────▲─────────────────┘
-                                │ implements        │ implements
+                                │ implement eder     │ implement eder
                  ┌──────────────┴───────┐   ┌───────┴────────────────┐
                  │ ConfigReader.Storage │   │ ConfigReader.Broker    │
                  │       .Mongo         │   │       .Redis           │
@@ -39,199 +40,215 @@ MongoDB, Redis or ASP.NET. Infrastructure and hosts depend on the core, never th
                             │                       │
       ┌─────────────────────┴───────────┐           │  publish/subscribe
       │      ConfigReader.Admin.Api      │           │  (config-changes:{app})
-      │  CRUD, auth, validation, audit,  │───────────┘
-      │  Swagger — writes to Mongo,      │
-      │  publishes change signals        │
+      │  CRUD, auth, doğrulama, audit,   │───────────┘
+      │  Swagger — Mongo'ya yazar,       │
+      │  değişiklik sinyali yayınlar     │
       └─────────────────▲────────────────┘
                         │ REST (X-Api-Key)
       ┌─────────────────┴────────────────┐        ┌──────────────────────────────┐
       │      ConfigReader.Admin.Web       │        │  Samples.ServiceA / ServiceB │
-      │        React (Vite) UI            │        │  real ConfigurationReader    │
-      └───────────────────────────────────┘        │  consumers (SERVICE-A/-B)    │
+      │        React (Vite) UI            │        │  gerçek ConfigurationReader  │
+      └───────────────────────────────────┘        │  tüketicileri (SERVICE-A/-B) │
                                                     └──────────────────────────────┘
 ```
 
-### Data flow (end to end)
+### Veri akışı (uçtan uca)
 
-1. An operator changes a record in the **Admin UI** (or via `curl`), which calls the **Admin API**.
-2. The API **writes to MongoDB** and **publishes a value-free change signal** to the record's Redis
-   channel (`config-changes:{applicationName}`).
-3. A **consumer service** holding a `ConfigurationReader`:
-   - is subscribed to its own channel, so it **re-reads from storage immediately** on the signal; and
-   - independently **polls** storage every `refreshTimerIntervalInMs` as the primary guarantee.
-4. `GetValue<T>(key)` now returns the new value — the running service never restarted.
+1. Bir operatör **Admin UI**'da (veya `curl` ile) bir kaydı değiştirir; bu da **Admin API**'yi
+   çağırır.
+2. API **MongoDB'ye yazar** ve kaydın Redis kanalına (`config-changes:{applicationName}`) **değer
+   içermeyen bir değişiklik sinyali yayınlar**.
+3. Bir `ConfigurationReader` tutan **tüketici servis**:
+   - kendi kanalına abone olduğu için sinyal geldiğinde **depodan hemen yeniden okur**; ve
+   - birincil garanti olarak, depoyu bağımsız şekilde her `refreshTimerIntervalInMs`'de bir
+     **poll'lar**.
+4. `GetValue<T>(key)` artık yeni değeri döndürür — çalışan servis hiç yeniden başlatılmamıştır.
 
-### Projects
+### Projeler
 
-| Project | Layer | Responsibility |
+| Proje | Katman | Sorumluluk |
 |---|---|---|
-| `ConfigReader.Core` | Domain + Application | The library. `ConfigurationReader`, ports, type conversion, cache. **No infra/host NuGet references.** |
-| `ConfigReader.Storage.Mongo` | Infrastructure | `IConfigurationStore` + `IConfigurationStoreFactory` MongoDB adapters, seeder. |
-| `ConfigReader.Broker.Redis` | Infrastructure | `IChangeNotifier` / `IChangeSubscriber` Redis Pub/Sub adapters. |
-| `ConfigReader.Admin.Api` | Presentation | Management CRUD REST API (auth, validation, audit, Swagger, change publishing). |
-| `ConfigReader.Admin.Web` | Presentation | React (Vite) admin UI; client-side name filter. |
-| `ConfigReader.Samples.ServiceA` / `ServiceB` | Sample host | Real consumers that read live values in a loop. |
+| `ConfigReader.Core` | Domain + Application | Kütüphanenin kendisi. `ConfigurationReader`, portlar, tip dönüşümü, cache. **Infra/host NuGet referansı yoktur.** |
+| `ConfigReader.Storage.Mongo` | Infrastructure | `IConfigurationStore` + `IConfigurationStoreFactory` MongoDB adaptörleri, seeder. |
+| `ConfigReader.Broker.Redis` | Infrastructure | `IChangeNotifier` / `IChangeSubscriber` Redis Pub/Sub adaptörleri. |
+| `ConfigReader.Admin.Api` | Presentation | Yönetim CRUD REST API'si (auth, doğrulama, audit, Swagger, değişiklik yayını). |
+| `ConfigReader.Admin.Web` | Presentation | React (Vite) admin arayüzü; client-side isim filtresi. |
+| `ConfigReader.Samples.ServiceA` / `ServiceB` | Örnek host | Canlı değerleri döngü içinde okuyan gerçek tüketiciler. |
 
 ---
 
-## Using the library in your project
+## Kütüphaneyi kendi projenizde kullanma
 
-Add a reference to `ConfigReader.Core` and to a storage adapter (`ConfigReader.Storage.Mongo`).
-Then, **once at your composition root**, register the store factory and construct a reader with the
-case's exact three-parameter signature:
+`ConfigReader.Core`'a ve bir depolama adaptörüne (`ConfigReader.Storage.Mongo`) referans ekleyin.
+Ardından, **composition root'unuzda yalnızca bir kez**, store factory'sini kaydedin ve case'in
+tam üç parametreli imzasıyla bir reader oluşturun:
 
 ```csharp
 using ConfigReader.Core.Application;
 using ConfigReader.Storage.Mongo;
 
-// 1. Composition root (run once at startup): teach Core how to turn a connection string into a
-//    store, without Core ever referencing MongoDB.
+// 1. Composition root (başlangıçta bir kez çalıştırılır): Core'a, bir connection string'i
+//    Core'un MongoDB'ye hiç referans vermeden nasıl bir store'a çevireceğini öğretir.
 ConfigurationReader.UseStoreFactory(new MongoConfigurationStoreFactory());
 
-// 2. Optional: wire push-based (instant) invalidation via the Redis broker. Omit this and the
-//    library runs on polling only — the broker is never a single point of dependency.
+// 2. Opsiyonel: Redis broker üzerinden push-tabanlı (anlık) invalidation bağlayın. Bu satır
+//    atlanırsa kütüphane yalnızca polling ile çalışır — broker hiçbir zaman tek bir bağımlılık
+//    noktası (single point of dependency) olmaz.
 //    ConfigurationReader.UseChangeSubscriberFactory(new RedisChangeSubscriberFactory(redisConnection));
 
-// 3. Construct the reader (at most three parameters — the library's only public entry point).
+// 3. Reader'ı oluşturun (en fazla üç parametre — kütüphanenin tek public giriş noktası).
 var reader = new ConfigurationReader(
     applicationName: "SERVICE-A",
     connectionString: "mongodb://localhost:27017/configdb",
     refreshTimerIntervalInMs: 5000);
 
-// 4. Read strongly-typed values anywhere, anytime — no restart needed when they change.
+// 4. Güçlü tipli değerleri her yerde, her an okuyun — değiştiklerinde restart gerekmez.
 string siteName = reader.GetValue<string>("SiteName");   // => "soty.io"
 int    maxItems = reader.GetValue<int>("MaxItemCount");
 bool   basket   = reader.GetValue<bool>("IsBasketEnabled");
 ```
 
-A complete, working example is `ConfigReader.Samples.ServiceA/Program.cs`: it reads its application
-name and connection strings from the environment, wires the Mongo store factory and the optional
-Redis subscriber factory, and prints the currently visible values on a loop.
+Eksiksiz, çalışan bir örnek `ConfigReader.Samples.ServiceA/Program.cs` dosyasındadır: uygulama
+adını ve connection string'lerini ortam değişkenlerinden okur, Mongo store factory'sini ve
+opsiyonel Redis subscriber factory'sini bağlar ve o an görünen değerleri döngü içinde yazdırır.
 
-- **`Value` is stored as a string** and converted to `T` at read time based on the record's `Type`
-  (`string`, `int`, `double`, `bool`).
-- **Only `IsActive = true` records** for the reader's **own `ApplicationName`** are ever visible —
-  no cross-tenant leakage.
-- **Storage fallback:** if the store becomes unreachable, `GetValue<T>` keeps serving the last
-  successful snapshot instead of throwing; the background loop self-heals on the next success.
-- The reader is `IAsyncDisposable` — dispose it on shutdown to stop the refresh loop and release the
-  broker subscription. The minimum refresh interval is `1000` ms.
+- **`Value` string olarak saklanır** ve okuma anında kaydın `Type` alanına göre (`string`, `int`,
+  `double`, `bool`) `T`'ye dönüştürülür.
+- Yalnızca reader'ın **kendi `ApplicationName`**'ine ait ve **`IsActive = true`** olan kayıtlar
+  görünür — tenant'lar arası sızıntı yoktur.
+- **Depolama fallback'i:** store erişilemez hale gelirse `GetValue<T>`, hata fırlatmak yerine son
+  başarılı anlık görüntüyü (snapshot) sunmaya devam eder; arka plan döngüsü bir sonraki başarıda
+  kendini iyileştirir (self-heal).
+- Reader `IAsyncDisposable`'dır — refresh döngüsünü durdurmak ve broker aboneliğini serbest
+  bırakmak için kapanışta dispose edin. Minimum refresh aralığı `1000` ms'dir.
 
-### Host-independent usage (web / web api / WCF / CoreWCF)
+### Host'tan bağımsız kullanım (web / web api / WCF / CoreWCF)
 
-`ConfigReader.Core` is a **pure .NET 8 class library with no dependency on any host framework**
-(no ASP.NET, no WCF, no hosting packages — verifiable in `ConfigReader.Core.csproj`). It is therefore
-consumed **identically from any host** using the same three-parameter constructor and `GetValue<T>`:
+`ConfigReader.Core`, **herhangi bir host framework'üne bağımlılığı olmayan saf bir .NET 8 class
+library'sidir** (ASP.NET yok, WCF yok, hosting paketi yok — `ConfigReader.Core.csproj` üzerinden
+doğrulanabilir). Bu nedenle **herhangi bir host'tan aynı şekilde**, aynı üç parametreli
+constructor ve `GetValue<T>` ile tüketilir:
 
-- **Console / worker service** — see the sample consumers.
-- **ASP.NET Core web app / Web API** — register a single `ConfigurationReader` in DI (as a singleton)
-  and inject it into controllers/services; the Admin API in this repo is itself an ASP.NET host.
-- **WCF / CoreWCF** — construct one `ConfigurationReader` in the service host (e.g. a singleton
-  service instance or a static composition root) and call `GetValue<T>` from your operation
-  contracts. **No separate WCF sample project is required**: because the core carries no host
-  coupling, hosting it under CoreWCF is the same two lines (`UseStoreFactory` + `new
-  ConfigurationReader(...)`) shown above. This is how the case's "the dll must be reachable from web,
-  wcf, web api — every kind of project" requirement is satisfied.
+- **Console / worker service** — örnek tüketicilere bakın.
+- **ASP.NET Core web app / Web API** — DI'da tek bir `ConfigurationReader`'ı (singleton olarak)
+  kaydedin ve controller/servislere enjekte edin; bu repodaki Admin API'nin kendisi de bir ASP.NET
+  host'tur.
+- **WCF / CoreWCF** — servis host'unda tek bir `ConfigurationReader` oluşturun (ör. bir singleton
+  servis örneği veya statik bir composition root) ve operation contract'larınızdan `GetValue<T>`'yi
+  çağırın. **Ayrı bir WCF örnek projesine gerek yoktur**: çekirdek hiçbir host bağımlılığı
+  taşımadığından, onu CoreWCF altında host etmek yukarıda gösterilen aynı iki satırdır
+  (`UseStoreFactory` + `new ConfigurationReader(...)`). Case'in "dll'in web, wcf, web api — her
+  türlü projeden erişilebilir olmalı" isteri bu şekilde karşılanır.
 
 ---
 
-## Running the whole ecosystem with docker-compose
+## Tüm ekosistemi docker-compose ile çalıştırma
 
-**Prerequisites:** Docker + Docker Compose v2.
+**Ön koşullar:** Docker + Docker Compose v2. Yerel .NET SDK veya Node kurulumuna gerek yoktur;
+her imaj Docker içinde kaynak koddan build edilir.
 
 ```bash
-# 1. Provide local environment values (credentials, ports, admin key) in .env. .env is gitignored.
+# 1. Repoyu klonlayın ve solution kök dizinine girin.
+git clone <repo-url>
+cd code
 
-# 2. Build and start all six services (mongo, redis, config-api, config-ui, service-a, service-b).
+# 2. Altı servisin tamamını build edip başlatın (mongo, redis, config-api, config-ui, service-a, service-b).
 docker compose build
 docker compose up -d --wait --wait-timeout 90
 ```
 
-On first start the Admin API idempotently seeds the case's demo dataset (`SiteName`,
-`IsBasketEnabled`, `MaxItemCount`). Data lives in the `mongo-data` volume, so it survives
-`docker compose down` / `up`.
+`.env` dosyası, yerel-geliştirme-amaçlı örnek kimlik bilgileriyle repoda commit edilmiş halde
+gelir; böylece taze bir klonda ek bir kurulum adımı gerekmeden çalışır. **Bu değerler yalnızca
+yerel değerlendirme içindir; bunları yeniden kullanmayın veya production ortamında `.env`
+dosyasına gerçek secret'lar commit etmeyin.**
 
-| Service | URL (host) | Notes |
+İlk başlatmada Admin API, case'in demo veri setini (`SiteName`, `IsBasketEnabled`,
+`MaxItemCount`) idempotent şekilde seed'ler. Veri `mongo-data` volume'ünde tutulur; bu nedenle
+`docker compose down` / `up` sonrasında da kalıcıdır.
+
+| Servis | URL (host) | Notlar |
 |---|---|---|
-| Admin API (`config-api`) | http://localhost:8080 | Requires the `X-Api-Key` header. Swagger UI in Development only. |
-| Admin UI (`config-ui`) | http://localhost:8081 | Admin key is read from `.env` automatically; name filter runs client-side. |
-| `mongo` / `redis` | not published | Reachable only on the internal compose network. |
+| Admin API (`config-api`) | http://localhost:8080 | `X-Api-Key` header'ı gerektirir. Swagger UI yalnızca Development ortamında. |
+| Admin UI (`config-ui`) | http://localhost:8081 | Admin key `.env`'den otomatik okunur; isim filtresi client-side çalışır. |
+| `mongo` / `redis` | dışarı açık değil | Yalnızca dahili compose ağında erişilebilir. |
 
-Update a value and watch a consumer pick it up:
+Bir değeri güncelleyin ve bir tüketicinin bunu yakaladığını izleyin:
 
 ```bash
-# List records (find the SiteName id):
+# Kayıtları listele (SiteName id'sini bulmak için):
 curl -s -H "X-Api-Key: $ADMIN_API_KEY" http://localhost:8080/api/configurations
 
-# Update SERVICE-A's SiteName:
+# SERVICE-A'nın SiteName değerini güncelle:
 curl -X PUT -H "X-Api-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
   -d '{"name":"SiteName","type":"string","value":"updated.soty.io","isActive":true,"applicationName":"SERVICE-A"}' \
   http://localhost:8080/api/configurations/<id>
 
-# Observe SERVICE-A reflect the new value (instantly, via the Redis broker):
+# SERVICE-A'nın yeni değeri yansıttığını gözlemle (Redis broker sayesinde anında):
 docker compose logs -f service-a
 
-# Tidy up (add -v to also drop the mongo volume):
+# Temizle (mongo volume'ünü de silmek için -v ekleyin):
 docker compose down
 ```
 
 ---
 
-## How the case requirements are met
+## Case isterleri nasıl karşılanıyor
 
-| Requirement | Where |
+| İster | Nerede |
 |---|---|
-| At most 3 constructor params; `T GetValue<T>(key)` | `ConfigurationReader` public surface. |
-| `GetValue<string>("SiteName") == "soty.io"` | Seeded data; demonstrated live in `service-a` logs. |
-| Only `IsActive = 1` records returned | Server-side filter in `MongoConfigurationStore.GetActiveRecordsAsync`. `MaxItemCount` (inactive) stays `<absent>` in `service-a`. |
-| Per-application isolation (no cross-tenant leak) | Filtered by `ApplicationName`; `service-b` never sees `service-a`'s `SiteName`. |
-| Works when storage is down (fallback) | Last-good snapshot kept; failures surfaced, never thrown to the consumer. |
-| Periodic refresh, no restart needed | `PeriodicTimer` loop + atomic snapshot swap (concurrency-safe cache). |
-| **Extra:** message broker for instant updates | Redis Pub/Sub (`ConfigReader.Broker.Redis`); polling remains the primary guarantee. |
-| **Extra:** async/await & TPL | `PeriodicTimer`, `IAsyncDisposable`, async store/broker calls throughout. |
-| **Extra:** TDD | xUnit + FluentAssertions + NSubstitute + Testcontainers across all layers. |
-| **Extra:** runnable ecosystem | `docker-compose.yml` (mongo, redis, config-api, config-ui, service-a, service-b). |
-| **Extra:** documentation | This README. |
+| En fazla 3 constructor parametresi; `T GetValue<T>(key)` | `ConfigurationReader` public yüzeyi. |
+| `GetValue<string>("SiteName") == "soty.io"` | Seed edilen veri; `service-a` loglarında canlı olarak gösterilir. |
+| Yalnızca `IsActive = 1` kayıtlar döner | `MongoConfigurationStore.GetActiveRecordsAsync` içinde server-side filtre. `MaxItemCount` (inactive) `service-a`'da `<absent>` olarak kalır. |
+| Uygulama başına izolasyon (tenant'lar arası sızıntı yok) | `ApplicationName`'e göre filtrelenir; `service-b`, `service-a`'nın `SiteName`'ini asla göremez. |
+| Storage erişilemez olduğunda çalışabilme (fallback) | Son başarılı snapshot korunur; hatalar loglanır, tüketiciye asla fırlatılmaz. |
+| Periyodik refresh, restart gerektirmez | `PeriodicTimer` döngüsü + atomik snapshot değişimi (concurrency-safe cache). |
+| **Ekstra:** anlık güncellemeler için message broker | Redis Pub/Sub (`ConfigReader.Broker.Redis`); polling birincil garanti olmaya devam eder. |
+| **Ekstra:** async/await & TPL | `PeriodicTimer`, `IAsyncDisposable`, baştan sona async store/broker çağrıları. |
+| **Ekstra:** TDD | Tüm katmanlarda xUnit + FluentAssertions + NSubstitute + Testcontainers. |
+| **Ekstra:** çalışır ekosistem | `docker-compose.yml` (mongo, redis, config-api, config-ui, service-a, service-b). |
+| **Ekstra:** dokümantasyon | Bu README. |
 
 ---
 
-## Security & operations (Admin API)
+## Güvenlik ve operasyon (Admin API)
 
-### TLS / HTTPS (production requirement)
+### TLS / HTTPS (production isteri)
 
-In the local `docker-compose` environment the Admin API is reached over plain HTTP for
-convenience. **In production, HTTPS is mandatory** — the API carries an admin API key and can
-change the live behaviour of every service, so the transport must be encrypted end to end.
+Yerel `docker-compose` ortamında Admin API kolaylık amacıyla düz HTTP üzerinden erişilir.
+**Production'da HTTPS zorunludur** — API, her servisin canlı davranışını değiştirebilen bir admin
+API key taşır; bu nedenle transport uçtan uca şifrelenmelidir.
 
-Enable it in one of two standard ways:
+Bunu iki standart yoldan biriyle etkinleştirin:
 
-- **Reverse proxy / ingress termination (recommended):** terminate TLS at nginx / Traefik / a
-  cloud load balancer and forward to the API over the internal network. Configure
-  `ForwardedHeaders` so the app sees the original scheme.
-- **Kestrel direct TLS:** provide a certificate via `ASPNETCORE_Kestrel__Certificates__Default__Path`
-  and `...__Password` (or `ASPNETCORE_URLS=https://+:443`) and keep `UseHttpsRedirection` active.
+- **Reverse proxy / ingress termination (önerilen):** TLS'i nginx / Traefik / bir cloud load
+  balancer'da sonlandırın ve dahili ağ üzerinden API'ye yönlendirin. Uygulamanın orijinal şemayı
+  görmesi için `ForwardedHeaders`'ı yapılandırın.
+- **Kestrel direct TLS:** `ASPNETCORE_Kestrel__Certificates__Default__Path` ve `...__Password`
+  (veya `ASPNETCORE_URLS=https://+:443`) üzerinden bir sertifika sağlayın ve
+  `UseHttpsRedirection`'ı aktif tutun.
 
-Never expose the Admin API on plain HTTP outside a trusted local network.
+Admin API'yi güvenilir bir yerel ağın dışında asla düz HTTP üzerinde açığa çıkarmayın.
 
-### Authentication (CFG-9.1)
+### Kimlik doğrulama (CFG-9.1)
 
-All endpoints (reads included) require a valid `X-Api-Key` header. The key is read from
-configuration/environment (`AdminApi__ApiKey`) — never hard-coded — and the API fails closed
-(401) if it is unset.
+Tüm endpoint'ler (okumalar dahil) geçerli bir `X-Api-Key` header'ı gerektirir. Key,
+konfigürasyon/ortam değişkeninden (`AdminApi__ApiKey`) okunur — asla koda gömülmez — ve
+ayarlanmamışsa API kapalı olarak başarısız olur (401).
 
 ### CORS (CFG-9.6)
 
-Only the browser origins listed in `AdminApi:AllowedOrigins` may call the API. `AllowAnyOrigin`
-is never used.
+API'yi yalnızca `AdminApi:AllowedOrigins` listesindeki tarayıcı origin'leri çağırabilir.
+`AllowAnyOrigin` hiçbir zaman kullanılmaz.
 
 ### Rate limiting (CFG-9.6)
 
-Write endpoints (`POST`/`PUT`) are throttled by a fixed-window limiter. Tune it with
-`AdminApi:WriteRateLimit:PermitLimit` and `AdminApi:WriteRateLimit:WindowSeconds`.
+Yazma endpoint'leri (`POST`/`PUT`) sabit pencereli (fixed-window) bir limiter ile kısıtlanır.
+`AdminApi:WriteRateLimit:PermitLimit` ve `AdminApi:WriteRateLimit:WindowSeconds` ile ayarlayın.
 
-### Error responses (CFG-9.6)
+### Hata yanıtları (CFG-9.6)
 
-Unhandled exceptions return a generic `ProblemDetails` with a `correlationId`; stack traces,
-internal messages and connection strings are logged internally and never sent to the client.
-Baseline security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) are added
-to every response.
+Yakalanmamış exception'lar, bir `correlationId` içeren genel bir `ProblemDetails` döndürür; stack
+trace'ler, iç mesajlar ve connection string'ler yalnızca dahili olarak loglanır, hiçbir zaman
+client'a gönderilmez. Her yanıta temel güvenlik header'ları (`X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`) eklenir.
+</content>
